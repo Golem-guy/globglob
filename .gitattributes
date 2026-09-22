@@ -1,0 +1,10 @@
+# Vault payloads are binary. `binary` is git's shorthand for `-diff -merge -text`:
+# never generate a textual diff for them, never attempt a line-based merge, and
+# never apply end-of-line conversion. Without this, git sniffs each blob and a
+# parquet file that happens to look text-ish gets diffed byte-by-byte into the
+# terminal (and, on a Windows checkout, could have its bytes rewritten by CRLF
+# normalisation -- silent corruption of the archive).
+*.parquet binary
+
+# The raw NSE archives are gzip -- same reasoning.
+*.json.gz binary

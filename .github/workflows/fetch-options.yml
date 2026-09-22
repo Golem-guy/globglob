@@ -1,0 +1,83 @@
+name: Fetch NSE Option Chain to Vault
+
+on:
+  schedule:
+    # Cron is UTC. IST = UTC+5:30, market hours 09:15-15:30 IST.
+    # 09:15 IST = 03:45 UTC, 15:30 IST = 10:00 UTC. Every 5 min, Mon-Fri.
+    # GitHub's scheduler is best-effort (can drift a few minutes under
+    # load) -- the script logs its own true fetch timestamp on every row,
+    # so analysis should always key off that column, not this schedule.
+    # Weekday/holiday filtering ALSO happens inside the script itself
+    # (holidays.py) as a second line of defense independent of this cron.
+    - cron: "45,50,55 3 * * 1-5"
+    - cron: "*/5 4-9 * * 1-5"
+    - cron: "0,5,10,15,20,25,30 10 * * 1-5"
+  workflow_dispatch:      # manual trigger from the Actions tab, for testing
+    inputs:
+      symbols:
+        description: "Comma-separated subset to poll (e.g. NIFTY,BANKNIFTY). Blank = all symbols in config/symbols.yaml."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-options-vault
+  cancel-in-progress: false   # queue, never kill a mid-flight fetch/commit
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fetch (with retry for transient GitHub/runner hiccups)
+        # This retries the WHOLE script up to 2 extra times only if it
+        # exits non-zero -- note run_fetch.py itself already retries
+        # individual NSE calls internally and exits 0 even on a fully bad
+        # cycle, so this outer retry mainly guards against runner-level
+        # issues (network blip on the Actions runner itself, etc.).
+        uses: nick-fields/retry@v3
+        env:
+          # Empty on scheduled runs -> config_loader polls all symbols.
+          # On a manual run, the workflow_dispatch `symbols` input narrows
+          # the set without editing symbols.yaml.
+          NSE_SYMBOLS: ${{ github.event.inputs.symbols }}
+        with:
+          timeout_minutes: 5
+          max_attempts: 2
+          command: python scripts/run_fetch.py
+
+      - name: Commit and push vault data
+        run: |
+          git config user.name "options-vault-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add vault/
+          if git diff --cached --quiet; then
+            echo "No changes to commit (non-trading day, or nothing new)."
+            exit 0
+          fi
+          git commit -m "vault: snapshot $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          # Pull-rebase before push in case another run (or a manual push)
+          # landed in between checkout and commit -- avoids a failed push
+          # on a race, since multiple cycles a day makes this non-trivial.
+          for i in 1 2 3; do
+            git pull --rebase && git push && break
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done

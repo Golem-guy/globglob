@@ -1,0 +1,28 @@
+# symbols.yaml
+#
+# Single source of truth for WHAT this pipeline polls. Replaces the values
+# that used to be hardcoded in three places:
+#   - run_fetch.py         SYMBOLS list
+#   - nse_fetch.py         LOT_SIZE_FALLBACK, INDEX_DISPLAY_NAME
+#   - nse_fetch.py         INDIA_VIX_DISPLAY_NAME
+#
+# index_display_name  : the exact name NSE's allIndices endpoint reports for
+#                       this symbol (used to pick the right OHLC/VIX row).
+# lot_size_fallback   : contract multiplier. There is NO live source for lot
+#                       size anymore (the quote-derivative endpoint is dead),
+#                       so this table is the only source. Current as of the
+#                       January 2026 NSE revision -- re-check NSE circulars
+#                       periodically and update here.
+
+symbols:
+  NIFTY:
+    index_display_name: "NIFTY 50"
+    lot_size_fallback: 65
+  BANKNIFTY:
+    index_display_name: "NIFTY BANK"
+    lot_size_fallback: 30
+  NIFTYNXT50:
+    index_display_name: "NIFTY NEXT 50"
+    lot_size_fallback: 25
+
+india_vix_display_name: "INDIA VIX"

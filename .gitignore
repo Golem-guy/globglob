@@ -1,0 +1,8 @@
+# Local Python virtual environment (dev only; CI builds its own via
+# pip install -r requirements.txt). Never commit this into the vault repo.
+.venv/
+venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
